@@ -9,6 +9,8 @@ import tempfile
 import numpy
 import soundfile as sf
 import speech_recognition as sr
+import multiprocessing as mp
+import sys
 from subprocess import call
 from pydub import AudioSegment
 from datetime import datetime
