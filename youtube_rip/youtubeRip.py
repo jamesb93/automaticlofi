@@ -20,6 +20,7 @@ parser = argparse.ArgumentParser(description='Slice a folder of audio files usin
 parser.add_argument('-n', '--numsamples', type=int, help='Number of samples to download')
 parser.add_argument('-q', '--query', type=str, help='The search term to query youtube with', default='lofi hip hop')
 parser.add_argument('-t', '--textcheck', type=bool, help='Check for text (delete sample if not)', default=False)
+parser.add_argument('-o', '--output', type=str, help='Output folder', default=os.path.join(os.getcwd(), 'output'))
 args = parser.parse_args()
 
 acceptedFiles       = ['.webm', '.wav', '.mp3', '.aiff', '.aif', '.wave', '.m4a']
@@ -29,12 +30,9 @@ recursiveMultiplier = 0
 #TODO Folder output
 
 def get_audio(link: str):
-    direc = os.path.join(
-        os.getcwd(), 'output'
-    )
-    if not os.path.exists(direc):
-        os.makedirs(direc)
-    location = direc + '/' + '%(title)s.%(ext)s'
+    if not os.path.exists(args.output):
+        os.makedirs(args.output)
+    location = args.output + '/' + '%(title)s.%(ext)s'
 
     downloadCommand = [
         'youtube-dl', 
@@ -189,14 +187,13 @@ def frame_to_ms(sr: int, frame: int):
 def full_process(terms: str, textcheck: bool, **kwargs):
     pages  = kwargs.get('pages',1)
     maxlen = kwargs.get('maxlen', 20)
-    output_folder = os.path.join(os.getcwd(), 'output')
 
     audio_from_search(terms, pages)
-    slice_folder(output_folder)
-    recursive_slice(output_folder, maxlen, 1)
+    slice_folder(args.output)
+    recursive_slice(args.output, maxlen, 1)
     if textcheck == True:
-        speech_folder(output_folder)
-    rename_files(output_folder)
+        speech_folder(args.output)
+    rename_files(args.output)
     sys.write.stdout('quotes 1')
     print('Finished processing!')
 
