@@ -9,14 +9,35 @@ import tempfile
 import numpy
 import soundfile as sf
 import speech_recognition as sr
+import multiprocessing as mp
+import sys
+import argparse
 from subprocess import call
 from pydub import AudioSegment
 from datetime import datetime
 
+parser = argparse.ArgumentParser(description='Slice a folder of audio files using fluid-noveltyslice.')
+parser.add_argument('-n', '--numsamples', type=str, help='Number of samples to download')
+parser.add_argument('-q', '--query', type=str, help='The search term to query youtube with')
+args = parser.parse_args()
+
 acceptedFiles       = ['.webm', '.wav', '.mp3', '.aiff', '.aif', '.wave', '.m4a']
 recursiveMultiplier = 0
 
-def audio_from_search(searchString, pages):
+#TODO limit number of downloaded tracks
+
+def get_audio(link: str):
+    direc = os.path.join(
+        os.getcwd(), 'output'
+    )
+    if not os.path.exists(direc):
+        os.makedirs(direc)
+    location = direc + '/' + '%(title)s.%(ext)s'
+
+    downloadCommand = ['youtube-dl', '-o', location, '-x', '--audio-format', 'wav', link]
+    call(downloadCommand)
+
+def audio_from_search(searchString: str, pages: int):
     audioLink = 'https://www.youtube.com/results?search_query='
 
     searchStringList = searchString.split()
@@ -27,18 +48,8 @@ def audio_from_search(searchString, pages):
 
     get_audio(audioLink)
 
-    convert_folder(os.getcwd() + '/output')
 
-def get_audio(link):
-    direc = os.getcwd() + '/output'
-    if not os.path.exists(direc):
-        os.makedirs(direc)
-    location = direc + '/' + '%(title)s.%(ext)s'
-
-    downloadCommand = ['youtube-dl', '-o', location, '-f', 'bestaudio', '--audio-format', '"wav"', link]
-    call(downloadCommand)
-
-def convert_audio(file):
+def convert_audio(file: str):
     src = file
     pre = os.path.splitext(file)[0]
     dst = pre + '.wav'
@@ -46,18 +57,7 @@ def convert_audio(file):
     sound = AudioSegment.from_file(src)
     sound.export(dst, format="wav")
 
-def convert_folder(path):
-    print('Converting files to wav...')
-    fileList = os.listdir(path)
-    for i in range(len(fileList)):
-        if os.path.splitext(fileList[i])[1] in acceptedFiles:
-            name = path + '/' + fileList[i]
-            convert_audio(name)
-            os.remove(name)
-            print('Converted file ' + str(i + 1) + '/' + str(len(fileList)))
-    print(str(len(fileList)) + ' files converted!')
-
-def slice_audio(file, **kwargs):
+def slice_audio(file: str, **kwargs):
     feature     = kwargs.get('feature',                      '0') # 0=spectrum, 1=MFCC, 2=pitch, 3=loudness
     kernelsize  = kwargs.get('kernelsize',                  '10')
     threshold   = kwargs.get('threshold',                  '0.5')
@@ -95,19 +95,19 @@ def slice_audio(file, **kwargs):
             filename = os.path.splitext(file)[0] + '_' + str(i + 2) + '.wav'
             originalWav[start : end].export(filename, format="wav")
 
-def slice_folder(path):
+def slice_folder(path: str):
     print('Slicing files...')
     fileList = os.listdir(path)
     for i in range(len(fileList)):
         if os.path.splitext(fileList[i])[1] == '.wav':
-            name = path + '/' + fileList[i]
+            name = os.path.join(path, fileList[i])
             slice_audio(name)
             os.remove(name)
             print('Sliced file ' + str(i + 1) + '/' + str(len(fileList)))
     print(str(len(fileList)) + ' files sliced!')
 
-def recursive_slice(path, maxLen, iteration):
-    print('Recurscive slicing...')
+def recursive_slice(path: str, maxLen: float, iteration: int):
+    print('Recursive slicing...')
     checkAgain = False
     fileList = os.listdir(path)
     mul = str((1 - (iteration * recursiveMultiplier)) * 0.5)
@@ -123,7 +123,7 @@ def recursive_slice(path, maxLen, iteration):
     if checkAgain == True:
         recursive_slice(path, maxLen, iteration + 1)
 
-def get_speech(file):
+def get_speech(file: str):
     r = sr.Recognizer()
 
     with sr.AudioFile(file) as source:
@@ -136,7 +136,7 @@ def get_speech(file):
             print(e)
             return None
 
-def speech_folder(path):
+def speech_folder(path: str):
     print('Checking for speech...')
     fileList = os.listdir(path)
     for i in range(len(fileList)):
@@ -151,7 +151,7 @@ def speech_folder(path):
                 print('Found text: ' + result)
     print(str(len(fileList)) + ' files checked!')
 
-def rename_files(path):
+def rename_files(path: str):
     print('renaming files...')
     fileList = os.listdir(path)
     for i in range(len(fileList)):
@@ -167,38 +167,38 @@ def rename_files(path):
             
     print(str(len(fileList)) + ' files renamed!')
 
-def bufspill(audio_file):
-    # Reads an audio file and converts its content to a numpy array.
-
+def bufspill(audio_file: str):
     try:
         t_data, _ = sf.read(audio_file)
         return t_data.transpose()
     except:
         print(f'Could not read: {audio_file}')
 
-def frame_to_ms(sr, frame):
+def frame_to_ms(sr: int, frame: int):
     return (frame / sr) * 1000
 
-def full_process_quotes(terms, **kwargs):
+def full_process_quotes(terms: str, **kwargs):
+    pages  = kwargs.get('pages',1)
+    maxlen = kwargs.get('maxlen', 20)
+    output_folder = os.path.join(os.getcwd(), 'output')
+
+    audio_from_search(terms, pages)
+    slice_folder(output_folder)
+    recursive_slice(output_folder, maxlen, 1)
+    speech_folder(output_folder)
+    rename_files(output_folder)
+    print('Finished processing!')
+
+def full_process_samples(terms: str, **kwargs):
     pages  = kwargs.get('pages',1)
     maxlen = kwargs.get('maxlen', 20)
 
     audio_from_search(terms, pages)
     slice_folder(os.getcwd() + '/output')
     recursive_slice(os.getcwd() + '/output', maxlen, 1)
-    speech_folder(os.getcwd() + '/output')
     rename_files(os.getcwd() + '/output')
+    sys.write.stdout('quotes 1')
     print('Finished processing!')
 
-def full_process_samples(terms, **kwargs):
-    pages  = kwargs.get('pages',1)
-    maxlen = kwargs.get('maxlen', 20)
-
-    audio_from_search(terms, pages)
-    slice_folder(os.getcwd() + '/output')
-    recursive_slice(os.getcwd() + '/output', maxlen, 1)
-    rename_files(os.getcwd() + '/output')
-    print('Finished processing!')
-
-full_process('sad film quotes')
-full_process_samples('lounge jazz')
+full_process_samples(args.query)
+full_process_samples(args.query)
