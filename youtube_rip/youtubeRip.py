@@ -11,9 +11,15 @@ import soundfile as sf
 import speech_recognition as sr
 import multiprocessing as mp
 import sys
+import argparse
 from subprocess import call
 from pydub import AudioSegment
 from datetime import datetime
+
+parser = argparse.ArgumentParser(description='Slice a folder of audio files using fluid-noveltyslice.')
+parser.add_argument('-n', '--numsamples', type=str, help='Number of samples to download')
+parser.add_argument('-q', '--query', type=str, help='The search term to query youtube with')
+args = parser.parse_args()
 
 acceptedFiles       = ['.webm', '.wav', '.mp3', '.aiff', '.aif', '.wave', '.m4a']
 recursiveMultiplier = 0
@@ -194,5 +200,5 @@ def full_process_samples(terms: str, **kwargs):
     sys.write.stdout('quotes 1')
     print('Finished processing!')
 
-full_process_samples('sad film quotes')
-full_process_samples('lounge jazz')
+full_process_samples(args.query)
+full_process_samples(args.query)
