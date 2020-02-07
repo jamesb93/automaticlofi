@@ -18,6 +18,8 @@ from datetime import datetime
 acceptedFiles       = ['.webm', '.wav', '.mp3', '.aiff', '.aif', '.wave', '.m4a']
 recursiveMultiplier = 0
 
+#TODO limit number of downloaded tracks
+
 def get_audio(link: str):
     direc = os.path.join(
         os.getcwd(), 'output'
