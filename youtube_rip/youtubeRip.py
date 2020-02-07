@@ -17,14 +17,18 @@ from pydub import AudioSegment
 from datetime import datetime
 
 parser = argparse.ArgumentParser(description='Slice a folder of audio files using fluid-noveltyslice.')
-parser.add_argument('-n', '--numsamples', type=str, help='Number of samples to download')
+parser.add_argument('-n', '--numsamples', type=int, help='Number of samples to download')
 parser.add_argument('-q', '--query', type=str, help='The search term to query youtube with')
+parser.add_argument('-l', '--limit', type=str, help='The file size limit of the query')
 args = parser.parse_args()
 
 acceptedFiles       = ['.webm', '.wav', '.mp3', '.aiff', '.aif', '.wave', '.m4a']
 recursiveMultiplier = 0
 
 #TODO limit number of downloaded tracks
+#TODO Limit the file size 
+#TODO Folder output
+#TODO Quotes modes
 
 def get_audio(link: str):
     direc = os.path.join(
@@ -200,5 +204,4 @@ def full_process_samples(terms: str, **kwargs):
     sys.write.stdout('quotes 1')
     print('Finished processing!')
 
-full_process_samples(args.query)
 full_process_samples(args.query)

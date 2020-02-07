@@ -1,3 +1,4 @@
 *.wav
 .DS_Store
 youtube_rip/.mypy_cache
+.mypy_cache
