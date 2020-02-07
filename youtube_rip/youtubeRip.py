@@ -27,6 +27,8 @@ recursiveMultiplier = 0
 
 #TODO limit number of downloaded tracks
 #TODO Limit the file size 
+#TODO Folder output
+#TODO Quotes modes
 
 def get_audio(link: str):
     direc = os.path.join(
