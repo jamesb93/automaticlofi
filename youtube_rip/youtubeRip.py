@@ -18,8 +18,9 @@ from datetime import datetime
 
 parser = argparse.ArgumentParser(description='Slice a folder of audio files using fluid-noveltyslice.')
 parser.add_argument('-n', '--numsamples', type=int, help='Number of samples to download')
-parser.add_argument('-q', '--query', type=str, help='The search term to query youtube with')
+parser.add_argument('-q', '--query', type=str, help='The search term to query youtube with', default='lofi hip hop')
 parser.add_argument('-l', '--limit', type=str, help='The file size limit of the query')
+parser.add_argument('-t', '--textcheck', type=bool, help='Check for text (delete sample if not)', default=False)
 args = parser.parse_args()
 
 acceptedFiles       = ['.webm', '.wav', '.mp3', '.aiff', '.aif', '.wave', '.m4a']
@@ -49,7 +50,6 @@ def audio_from_search(searchString: str, pages: int):
     audioLink = audioLink[:-1] + '&page=' + str(pages)
 
     get_audio(audioLink)
-
 
 def convert_audio(file: str):
     src = file
@@ -179,7 +179,7 @@ def bufspill(audio_file: str):
 def frame_to_ms(sr: int, frame: int):
     return (frame / sr) * 1000
 
-def full_process_quotes(terms: str, **kwargs):
+def full_process(terms: str, textcheck: bool, **kwargs):
     pages  = kwargs.get('pages',1)
     maxlen = kwargs.get('maxlen', 20)
     output_folder = os.path.join(os.getcwd(), 'output')
@@ -187,19 +187,10 @@ def full_process_quotes(terms: str, **kwargs):
     audio_from_search(terms, pages)
     slice_folder(output_folder)
     recursive_slice(output_folder, maxlen, 1)
-    speech_folder(output_folder)
+    if textcheck == True:
+        speech_folder(output_folder)
     rename_files(output_folder)
-    print('Finished processing!')
-
-def full_process_samples(terms: str, **kwargs):
-    pages  = kwargs.get('pages',1)
-    maxlen = kwargs.get('maxlen', 20)
-
-    audio_from_search(terms, pages)
-    slice_folder(os.getcwd() + '/output')
-    recursive_slice(os.getcwd() + '/output', maxlen, 1)
-    rename_files(os.getcwd() + '/output')
     sys.write.stdout('quotes 1')
     print('Finished processing!')
 
-full_process_samples(args.query)
+full_process(args.query, args.textcheck)
