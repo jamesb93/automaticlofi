@@ -10,17 +10,22 @@ import numpy
 import soundfile as sf
 import speech_recognition as sr
 import multiprocessing as mp
-import sys
 import argparse
-from subprocess import call
+import subprocess
 from pydub import AudioSegment
 from datetime import datetime
+from typing import List
+
+FFTConfig = List[str]
 
 parser = argparse.ArgumentParser(description='Slice a folder of audio files using fluid-noveltyslice.')
 parser.add_argument('-n', '--numsamples', type=int, help='Number of samples to download')
 parser.add_argument('-q', '--query', type=str, help='The search term to query youtube with', default='lofi hip hop')
 parser.add_argument('-t', '--textcheck', type=bool, help='Check for text (delete sample if not)', default=False)
 parser.add_argument('-o', '--output', type=str, help='Output folder', default=os.path.join(os.getcwd(), 'output'))
+parser.add_argument('-r', '--recursive', type=bool, help='Boolean for determining if slicing should be performed recursively', default=True)
+parser.add_argument('-i', '--iterations', type=int, help='Number of iterations to recursively slice.', default=1)
+parser.add_argument('-p', '--numpages', type=int, help='Number of youtube pages to scrape', default=1)
 args = parser.parse_args()
 
 acceptedFiles       = ['.webm', '.wav', '.mp3', '.aiff', '.aif', '.wave', '.m4a']
@@ -29,172 +34,193 @@ recursiveMultiplier = 0
 #TODO limit number of downloaded tracks
 #TODO Folder output
 
-def get_audio(link: str):
-    if not os.path.exists(args.output):
-        os.makedirs(args.output)
-    location = args.output + '/' + '%(title)s.%(ext)s'
+class YoutubeQuery():
+    """
+    YoutubeQuery is a container for all the functions and data required to request and download videos from youtube
+    """
+    def __init__(self):
+        self.output:str
+        self.query:str
+        self.recognise_speech:bool
+        self.slice_recursively:bool
+        self.num_pages:int
+        self.recursion_params:dict
 
-    downloadCommand = [
-        'youtube-dl', 
-        '-o', location, 
-        '-x', '--audio-format', 'wav',
-        '--min-filesize', '2.0m',
-        '--max-filesize,', '1000.0m',
-        '--no-part',
-        link
-    ]
-    call(downloadCommand)
-
-def audio_from_search(searchString: str, pages: int):
-    audioLink = 'https://www.youtube.com/results?search_query='
-
-    searchStringList = searchString.split()
-    for i in range(len(searchStringList)):
-        audioLink = audioLink + searchStringList[i] + "+"
-
-    audioLink = audioLink[:-1] + '&page=' + str(pages)
-
-    get_audio(audioLink)
-
-def convert_audio(file: str):
-    src = file
-    pre = os.path.splitext(file)[0]
-    dst = pre + '.wav'
-                                                      
-    sound = AudioSegment.from_file(src)
-    sound.export(dst, format="wav")
-
-def slice_audio(file: str, **kwargs):
-    feature     = kwargs.get('feature',                      '0') # 0=spectrum, 1=MFCC, 2=pitch, 3=loudness
-    kernelsize  = kwargs.get('kernelsize',                  '10')
-    threshold   = kwargs.get('threshold',                  '0.5')
-    filtersize  = kwargs.get('filtersize',                   '1')
-    fftsettings = kwargs.get('fftsettings', ['1024', '-1', '-1'])
-    createFiles = kwargs.get('createfiles',                 True)
-
-    tmpdir  = tempfile.mkdtemp()
-    indices = os.path.join(tmpdir, 'indices.wav')
-
-    processCommand = ['fluid-noveltyslice', '-source', file, '-indices', indices,
-                        '-feature', feature, '-kernelsize', kernelsize, '-threshold', threshold,
-                        '-filtersize', filtersize, '-fftsettings', fftsettings[0], fftsettings[1], fftsettings[2]]
-
-    print('Slicing audio...')
-    call(processCommand)
-
-    data = bufspill(indices)
-    originalWav = AudioSegment.from_wav(file)
-    print('Found ' + str(len(data) + 1) + ' slices.')
-
-    sfData, samplerate = sf.read(file)
-
-    if createFiles == True:
-        print('Exporting slice 1/' + str(len(data) + 1))
-        filename = os.path.splitext(file)[0] + '_1.wav'
-        originalWav[0 : frame_to_ms(samplerate, data[0])].export(filename, format="wav")
-        for i in range(len(data)):
-            print('Exporting slice ' + str(i + 2) + '/' + str(len(data) + 1))
-            start    = frame_to_ms(samplerate, data[i])
-            if i == len(data) - 1:
-                end = len(originalWav)
-            else:
-                end  = frame_to_ms(samplerate, data[i + 1])
-            filename = os.path.splitext(file)[0] + '_' + str(i + 2) + '.wav'
-            originalWav[start : end].export(filename, format="wav")
-
-def slice_folder(path: str):
-    print('Slicing files...')
-    fileList = os.listdir(path)
-    for i in range(len(fileList)):
-        if os.path.splitext(fileList[i])[1] == '.wav':
-            name = os.path.join(path, fileList[i])
-            slice_audio(name)
-            os.remove(name)
-            print('Sliced file ' + str(i + 1) + '/' + str(len(fileList)))
-    print(str(len(fileList)) + ' files sliced!')
-
-def recursive_slice(path: str, maxLen: float, iteration: int):
-    print('Recursive slicing...')
-    checkAgain = False
-    fileList = os.listdir(path)
-    mul = str((1 - (iteration * recursiveMultiplier)) * 0.5)
-    for i in range(len(fileList)):
-        if os.path.splitext(fileList[i])[1] == '.wav':
-            name = path + '/' + fileList[i]
-            
-            if len(AudioSegment.from_wav(name)) > maxLen * 1000:
-                slice_audio(name, threshold=mul)
-                os.remove(name)
-                checkAgain = True
-
-    if checkAgain == True:
-        recursive_slice(path, maxLen, iteration + 1)
-
-def get_speech(file: str):
-    r = sr.Recognizer()
-
-    with sr.AudioFile(file) as source:
-        #r.adjust_for_ambient_noise(source)
-        audio = r.listen(source)
-        
+    def bufspill(self, audio_file: str):
         try:
-            return r.recognize_google(audio)
-        except Exception as e:
-            print(e)
-            return None
+            t_data, _ = sf.read(audio_file)
+            return t_data.transpose()
+        except:
+            print(f'Could not read: {audio_file}')
 
-def speech_folder(path: str):
-    print('Checking for speech...')
-    fileList = os.listdir(path)
-    for i in range(len(fileList)):
-        if os.path.splitext(fileList[i])[1] == '.wav':
-            print('Checking file ' + str(i + 1) + '/' + str(len(fileList)))
-            name = path + '/' + fileList[i]
-            result = get_speech(name)
-            if result is None:
+    def frame_to_ms(self, sr: int, frame: int):
+        return (frame / sr) * 1000
+
+    def audio_from_search(self, pages: int):
+        audio_link = 'https://www.youtube.com/results?search_query='
+
+        search_string_list = self.query.split()
+        for i in range(len(search_string_list)):
+            audio_link = audio_link + search_string_list[i] + "+"
+
+        audio_link = audio_link[:-1] + '&page=' + str(pages)
+
+        if not os.path.exists(args.output):
+            os.makedirs(args.output)
+        location = args.output + '/' + '%(title)s.%(ext)s'
+
+        subprocess.call([
+            'youtube-dl', 
+            '-o', location, 
+            '-x', '--audio-format', 'wav',
+            '--no-part',
+            audio_link
+        ])
+
+    def slice_audio(
+        self, 
+        file:str, 
+        feature:str="0",
+        kernelsize:str="10",
+        threshold:str="0.5",
+        filtersize:str="1",
+        fftsettings:FFTConfig=['1024', '-1', '-1'],
+        create_files:bool=True):
+
+        tmpdir  = tempfile.mkdtemp()
+        indices = os.path.join(tmpdir, 'indices.wav')
+
+        processCommand = ['fluid-noveltyslice', '-source', file, '-indices', indices,
+                            '-feature', feature, '-kernelsize', kernelsize, '-threshold', threshold,
+                            '-filtersize', filtersize, '-fftsettings', fftsettings[0], fftsettings[1], fftsettings[2]]
+
+        print('Slicing audio...')
+        subprocess.call(processCommand)
+
+        data = self.bufspill(indices)
+        originalWav = AudioSegment.from_wav(file)
+        print('Found ' + str(len(data) + 1) + ' slices.')
+
+        sfData, samplerate = sf.read(file)
+
+        if create_files == True:
+            print('Exporting slice 1/' + str(len(data) + 1))
+            filename = os.path.splitext(file)[0] + '_1.wav'
+            originalWav[0 : self.frame_to_ms(samplerate, data[0])].export(filename, format="wav")
+            for i in range(len(data)):
+                print('Exporting slice ' + str(i + 2) + '/' + str(len(data) + 1))
+                start    = self.frame_to_ms(samplerate, data[i])
+                if i == len(data) - 1:
+                    end = len(originalWav)
+                else:
+                    end  = self.frame_to_ms(samplerate, data[i + 1])
+                filename = os.path.splitext(file)[0] + '_' + str(i + 2) + '.wav'
+                originalWav[start : end].export(filename, format="wav")
+
+    def slice_folder(self):
+        print('Slicing files...')
+        file_list = os.listdir(self.output)
+        for i in range(len(file_list)):
+            if os.path.splitext(file_list[i])[1] == '.wav':
+                name = os.path.join(path, file_list[i])
+                self.slice_audio(file=name)
                 os.remove(name)
-                print('Removed the file: ' + name)
-            else:
-                print('Found text: ' + result)
-    print(str(len(fileList)) + ' files checked!')
+                print('Sliced file ' + str(i + 1) + '/' + str(len(file_list)))
+        print(str(len(file_list)) + ' files sliced!')
 
-def rename_files(path: str):
-    print('renaming files...')
-    fileList = os.listdir(path)
-    for i in range(len(fileList)):
-        if os.path.splitext(fileList[i])[1] == '.wav':
-            print('Renaming file ' + str(i + 1) + '/' + str(len(fileList)))
-            name     = path + '/' + fileList[i]
-            fileLen  = str(len(AudioSegment.from_wav(name))).replace('.','_').replace(' ','_').replace(':','_')
-            dateTime = str(datetime.now()).replace('.','_').replace(' ','_').replace(':','_')
-            newName  = str(i) + '_' + fileLen + '_' + dateTime + '.wav'
-            newPath  = path + '/' + newName
-            print(newPath)
-            os.rename(name, newPath)
+    def recursive_slice(self, iterations=1):
+        print('Recursive slicing...')
+        checkAgain = False
+        file_list = os.listdir(self.output)
+        mul = str((1 - (iteration * recursiveMultiplier)) * 0.5)
+        for i in range(len(file_list)):
+            if os.path.splitext(file_list[i])[1] == '.wav':
+                name = self.output + '/' + file_list[i]
+    
+                if len(AudioSegment.from_wav(name)) > self.recursion_params["maximum_length"] * 1000:
+                    self.slice_audio(name, threshold=mul)
+                    os.remove(name)
+                    checkAgain = True
+
+        if checkAgain == True:
+            self.recursive_slice(iterations=iterations+1)
+
+    def get_speech(self, file: str):
+        r = sr.Recognizer()
+
+        with sr.AudioFile(file) as source:
+            #r.adjust_for_ambient_noise(source)
+            audio = r.listen(source)
             
-    print(str(len(fileList)) + ' files renamed!')
+            try:
+                return r.recognize_google(audio)
+            except Exception as e:
+                print(e)
+                return None
 
-def bufspill(audio_file: str):
-    try:
-        t_data, _ = sf.read(audio_file)
-        return t_data.transpose()
-    except:
-        print(f'Could not read: {audio_file}')
+    def speech_folder(self):
+        print('Checking for speech...')
+        file_list = os.listdir(self.output)
+        for i in range(len(file_list)):
+            if os.path.splitext(file_list[i])[1] == '.wav':
+                print('Checking file ' + str(i + 1) + '/' + str(len(file_list)))
+                name = path + '/' + file_list[i]
+                result = get_speech(name)
+                if result is None:
+                    os.remove(name)
+                    print('Removed the file: ' + name)
+                else:
+                    print('Found text: ' + result)
+        print(str(len(file_list)) + ' files checked!')
 
-def frame_to_ms(sr: int, frame: int):
-    return (frame / sr) * 1000
+    def rename_files(self):
+        print('renaming files...')
+        file_list = os.listdir(self.output)
+        for i in range(len(file_list)):
+            if os.path.splitext(file_list[i])[1] == '.wav':
+                print('Renaming file ' + str(i + 1) + '/' + str(len(file_list)))
+                name     = path + '/' + file_list[i]
+                fileLen  = str(len(AudioSegment.from_wav(name))).replace('.','_').replace(' ','_').replace(':','_')
+                dateTime = str(datetime.now()).replace('.','_').replace(' ','_').replace(':','_')
+                newName  = str(i) + '_' + fileLen + '_' + dateTime + '.wav'
+                newPath  = path + '/' + newName
+                print(newPath)
+                os.rename(name, newPath)
+                
+        print(str(len(file_list)) + ' files renamed!')
+    
+    def info_to_max(self):
+        print('Some return information to max about where le files are')
 
-def full_process(terms: str, textcheck: bool, **kwargs):
-    pages  = kwargs.get('pages',1)
-    maxlen = kwargs.get('maxlen', 20)
 
-    audio_from_search(terms, pages)
-    slice_folder(args.output)
-    recursive_slice(args.output, maxlen, 1)
-    if textcheck == True:
-        speech_folder(args.output)
-    rename_files(args.output)
-    sys.write.stdout('quotes 1')
-    print('Finished processing!')
+    # def full_process(terms: str, textcheck: bool, **kwargs):
+    #     pages  = kwargs.get('pages',1)
+    #     max_len = kwargs.get('max_len', 20)
 
-full_process(args.query, args.textcheck)
+    #     audio_from_search(terms, pages)
+    #     slice_folder(args.output)
+    #     recursive_slice(args.output, max_len, 1)
+    #     if textcheck == True:
+    #         speech_folder(args.output)
+    #     rename_files(args.output)
+    #     print('Finished processing!')
+
+
+# Creat the class instance
+scraper = YoutubeQuery()
+# Setup parameters
+scraper.output = args.output
+scraper.query = args.query
+scraper.num_pages = args.numpages
+scraper.recognise_speech = args.textcheck
+scraper.slice_recursively = args.recursive
+scraper.recursion_params = {
+    "maximum_length" : args.max_len
+}
+
+scraper.audio_from_search(pages=3)
+scraper.slice_folder()
+scraper.recursive_slice()
+if scraper.recognise_speech:
+    scraper.speech_folder() # <<-- Optional
+scraper.rename_files()
