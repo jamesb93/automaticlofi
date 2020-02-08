@@ -4,3 +4,4 @@ youtube_rip/.mypy_cache
 .mypy_cache
 *.aif
 *.part
+*.webm
