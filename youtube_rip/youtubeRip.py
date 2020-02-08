@@ -19,7 +19,6 @@ from datetime import datetime
 parser = argparse.ArgumentParser(description='Slice a folder of audio files using fluid-noveltyslice.')
 parser.add_argument('-n', '--numsamples', type=int, help='Number of samples to download')
 parser.add_argument('-q', '--query', type=str, help='The search term to query youtube with', default='lofi hip hop')
-parser.add_argument('-l', '--limit', type=str, help='The file size limit of the query')
 parser.add_argument('-t', '--textcheck', type=bool, help='Check for text (delete sample if not)', default=False)
 parser.add_argument('-o', '--output', type=str, help='Output folder', default=os.path.join(os.getcwd(), 'output'))
 args = parser.parse_args()
@@ -28,14 +27,22 @@ acceptedFiles       = ['.webm', '.wav', '.mp3', '.aiff', '.aif', '.wave', '.m4a'
 recursiveMultiplier = 0
 
 #TODO limit number of downloaded tracks
-#TODO Limit the file size 
+#TODO Folder output
 
 def get_audio(link: str):
     if not os.path.exists(args.output):
         os.makedirs(args.output)
     location = args.output + '/' + '%(title)s.%(ext)s'
 
-    downloadCommand = ['youtube-dl', '-o', location, '-x', '--audio-format', 'wav', link]
+    downloadCommand = [
+        'youtube-dl', 
+        '-o', location, 
+        '-x', '--audio-format', 'wav',
+        '--min-filesize', '2.0m',
+        '--max-filesize,', '1000.0m',
+        '--no-part',
+        link
+    ]
     call(downloadCommand)
 
 def audio_from_search(searchString: str, pages: int):
