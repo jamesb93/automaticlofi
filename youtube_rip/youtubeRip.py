@@ -25,6 +25,7 @@ parser.add_argument('-t', '--textcheck', type=bool, help='Check for text (delete
 parser.add_argument('-o', '--output', type=str, help='Output folder', default=os.path.join(os.getcwd(), 'output'))
 parser.add_argument('-r', '--recursive', type=bool, help='Boolean for determining if slicing should be performed recursively', default=True)
 parser.add_argument('-i', '--iterations', type=int, help='Number of iterations to recursively slice.', default=1)
+parser.add_argument('-m', '--maxlen', type=int, help='Maximum length to recursively slice to.', default=20)
 parser.add_argument('-p', '--numpages', type=int, help='Number of youtube pages to scrape', default=1)
 args = parser.parse_args()
 
@@ -195,11 +196,11 @@ class YoutubeQuery():
 
     # def full_process(terms: str, textcheck: bool, **kwargs):
     #     pages  = kwargs.get('pages',1)
-    #     max_len = kwargs.get('max_len', 20)
+    #     maxlen = kwargs.get('maxlen', 20)
 
     #     audio_from_search(terms, pages)
     #     slice_folder(args.output)
-    #     recursive_slice(args.output, max_len, 1)
+    #     recursive_slice(args.output, maxlen, 1)
     #     if textcheck == True:
     #         speech_folder(args.output)
     #     rename_files(args.output)
@@ -215,7 +216,7 @@ scraper.num_pages = args.numpages
 scraper.recognise_speech = args.textcheck
 scraper.slice_recursively = args.recursive
 scraper.recursion_params = {
-    "maximum_length" : args.max_len
+    "maximum_length" : args.maxlen
 }
 
 scraper.audio_from_search(pages=3)
