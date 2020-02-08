@@ -194,19 +194,6 @@ class YoutubeQuery():
         print('Some return information to max about where le files are')
 
 
-    # def full_process(terms: str, textcheck: bool, **kwargs):
-    #     pages  = kwargs.get('pages',1)
-    #     maxlen = kwargs.get('maxlen', 20)
-
-    #     audio_from_search(terms, pages)
-    #     slice_folder(args.output)
-    #     recursive_slice(args.output, maxlen, 1)
-    #     if textcheck == True:
-    #         speech_folder(args.output)
-    #     rename_files(args.output)
-    #     print('Finished processing!')
-
-
 # Creat the class instance
 scraper = YoutubeQuery()
 # Setup parameters
@@ -219,9 +206,14 @@ scraper.recursion_params = {
     "maximum_length" : args.maxlen
 }
 
+# This could be wrapped up in a process() function which knows which bits to do
 scraper.audio_from_search(pages=3)
 scraper.slice_folder()
-scraper.recursive_slice()
+
+if scraper.slice_recursively:
+    scraper.recursive_slice()
 if scraper.recognise_speech:
     scraper.speech_folder() # <<-- Optional
+
 scraper.rename_files()
+scraper.info_to_max()
