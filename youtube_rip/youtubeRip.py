@@ -18,15 +18,27 @@ from typing import List
 
 FFTConfig = List[str]
 
+#Utility for better command line arg parsing for booleans
+def str2bool(v):
+    if isinstance(v, bool):
+       return v
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
+
 parser = argparse.ArgumentParser(description='Slice a folder of audio files using fluid-noveltyslice.')
-parser.add_argument('-n', '--numsamples', type=int, help='Number of samples to download')
+parser.add_argument('-n', '--numsamples', type=int, help='Number of samples to download', default=1)
 parser.add_argument('-q', '--query', type=str, help='The search term to query youtube with', default='lofi hip hop')
-parser.add_argument('-t', '--textcheck', type=bool, help='Check for text (delete sample if not)', default=False)
+parser.add_argument('-t', '--textcheck', type=str2bool, help='Check for text (delete sample if not)', default=False)
 parser.add_argument('-o', '--output', type=str, help='Output folder', default=os.path.join(os.getcwd(), 'output'))
-parser.add_argument('-r', '--recursive', type=bool, help='Boolean for determining if slicing should be performed recursively', default=True)
+parser.add_argument('-r', '--recursive', type=str2bool, help='Boolean for determining if slicing should be performed recursively', default=True)
 parser.add_argument('-i', '--iterations', type=int, help='Number of iterations to recursively slice.', default=1)
 parser.add_argument('-m', '--maxlen', type=int, help='Maximum length to recursively slice to.', default=20)
 parser.add_argument('-p', '--numpages', type=int, help='Number of youtube pages to scrape', default=1)
+parser.add_argument('-x', '--randomsearch', type=str2bool, help='Randomly scramble the search indices', default=True)
 args = parser.parse_args()
 
 acceptedFiles       = ['.webm', '.wav', '.mp3', '.aiff', '.aif', '.wave', '.m4a']
@@ -40,12 +52,14 @@ class YoutubeQuery():
     YoutubeQuery is a container for all the functions and data required to request and download videos from youtube
     """
     def __init__(self):
+        self.numsamples:int
         self.output:str
         self.query:str
         self.recognise_speech:bool
         self.slice_recursively:bool
         self.num_pages:int
         self.recursion_params:dict
+        self.random_search:bool
 
     def bufspill(self, audio_file: str):
         try:
@@ -70,13 +84,24 @@ class YoutubeQuery():
             os.makedirs(args.output)
         location = args.output + '/' + '%(title)s.%(ext)s'
 
-        subprocess.call([
+        numsamples = self.numsamples
+        random_search = self.random_search
+
+        subprocess_args = [
             'youtube-dl', 
             '-o', location, 
             '-x', '--audio-format', 'wav',
+            '--max-downloads', str(numsamples),
             '--no-part',
+            '--playlist-random',
             audio_link
-        ])
+        ]
+
+        #Remove the one before the last entry, which is '--playlist-random'
+        if not random_search:
+            del subprocess_args[len(subprocess_args) - 2]
+        
+        subprocess.call(subprocess_args)
 
     def slice_audio(
         self, 
@@ -197,11 +222,13 @@ class YoutubeQuery():
 # Creat the class instance
 scraper = YoutubeQuery()
 # Setup parameters
+scraper.numsamples = args.numsamples
 scraper.output = args.output
 scraper.query = args.query
 scraper.num_pages = args.numpages
 scraper.recognise_speech = args.textcheck
 scraper.slice_recursively = args.recursive
+scraper.random_search = args.randomsearch
 scraper.recursion_params = {
     "maximum_length" : args.maxlen
 }
