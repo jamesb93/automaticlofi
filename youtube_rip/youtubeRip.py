@@ -4,6 +4,10 @@
 # brew install ffmpeg
 # Also requires an internet connection for youtube download and speech recognition.
 
+verbose = True
+if verbose:
+    print('Starting youtube rip')
+
 import os
 import tempfile
 import numpy
@@ -74,6 +78,9 @@ class YoutubeQuery():
     def audio_from_search(self, pages: int):
         audio_link = 'https://www.youtube.com/results?search_query='
 
+        if verbose:
+            print('Searching youtube for: ' + self.query)
+
         search_string_list = self.query.split()
         for i in range(len(search_string_list)):
             audio_link = audio_link + search_string_list[i] + "+"
@@ -82,6 +89,8 @@ class YoutubeQuery():
 
         if not os.path.exists(args.output):
             os.makedirs(args.output)
+            if verbose:
+                print('Creating output file here: ' + args.output)
         location = args.output + '/' + '%(title)s.%(ext)s'
 
         numsamples = self.numsamples
@@ -101,7 +110,10 @@ class YoutubeQuery():
         if not random_search:
             del subprocess_args[len(subprocess_args) - 2]
         
-        subprocess.call(subprocess_args)
+        print('TEST')
+        subprocess.call(subprocess_args, shell=False)
+        if verbose:
+                print('Youtube-dl subprocess completed.')
 
     def slice_audio(
         self, 
@@ -148,7 +160,7 @@ class YoutubeQuery():
         file_list = os.listdir(self.output)
         for i in range(len(file_list)):
             if os.path.splitext(file_list[i])[1] == '.wav':
-                name = os.path.join(path, file_list[i])
+                name = os.path.join(self.output, file_list[i])
                 self.slice_audio(file=name)
                 os.remove(name)
                 print('Sliced file ' + str(i + 1) + '/' + str(len(file_list)))
@@ -158,7 +170,7 @@ class YoutubeQuery():
         print('Recursive slicing...')
         checkAgain = False
         file_list = os.listdir(self.output)
-        mul = str((1 - (iteration * recursiveMultiplier)) * 0.5)
+        mul = str((1 - (iterations * recursiveMultiplier)) * 0.5)
         for i in range(len(file_list)):
             if os.path.splitext(file_list[i])[1] == '.wav':
                 name = self.output + '/' + file_list[i]
@@ -234,13 +246,25 @@ scraper.recursion_params = {
 }
 
 # This could be wrapped up in a process() function which knows which bits to do
+if verbose:
+    print('Getting audio from search...')
 scraper.audio_from_search(pages=3)
+if verbose:
+    print('Slicing...')
 scraper.slice_folder()
 
+
 if scraper.slice_recursively:
+    if verbose:
+        print('Slicing recursively...')
     scraper.recursive_slice()
 if scraper.recognise_speech:
+    if verbose:
+        print('Checking for speech...')
     scraper.speech_folder() # <<-- Optional
 
+if verbose:
+    print('Renaming files...')
 scraper.rename_files()
 scraper.info_to_max()
+
