@@ -43,6 +43,7 @@ parser.add_argument('-i', '--iterations', type=int, help='Number of iterations t
 parser.add_argument('-m', '--maxlen', type=int, help='Maximum length to recursively slice to.', default=20)
 parser.add_argument('-p', '--numpages', type=int, help='Number of youtube pages to scrape', default=1)
 parser.add_argument('-x', '--randomsearch', type=str2bool, help='Randomly scramble the search indices', default=True)
+parser.add_argument('-s', '--minsize', type=int, help='The minimum size of a returned file.', default=100)
 args = parser.parse_args()
 
 acceptedFiles       = ['.webm', '.wav', '.mp3', '.aiff', '.aif', '.wave', '.m4a']
@@ -64,6 +65,7 @@ class YoutubeQuery():
         self.num_pages:int
         self.recursion_params:dict
         self.random_search:bool
+        self.minslice:int
 
     def bufspill(self, audio_file: str):
         try:
@@ -103,6 +105,7 @@ class YoutubeQuery():
             '--max-downloads', str(numsamples),
             '--no-part',
             '--playlist-random',
+            '--match-filter', '!is_live',
             audio_link
         ]
 
@@ -166,6 +169,18 @@ class YoutubeQuery():
                 print('Sliced file ' + str(i + 1) + '/' + str(len(file_list)))
         print(str(len(file_list)) + ' files sliced!')
 
+        self.delete_small_files()
+
+    def delete_small_files(self):
+        print('Deleting files that are too small...')
+        file_list = os.listdir(self.output)
+        for i in range(len(file_list)):
+            if os.path.splitext(file_list[i])[1] == '.wav':
+                name = name = self.output + '/' + file_list[i]
+                if os.path.getsize(name) < self.minsize:
+                    os.remove(name)
+                    print('Deleted ' + name)
+                
     def recursive_slice(self, iterations=1):
         print('Recursive slicing...')
         checkAgain = False
@@ -179,6 +194,8 @@ class YoutubeQuery():
                     self.slice_audio(name, threshold=mul)
                     os.remove(name)
                     checkAgain = True
+
+        self.delete_small_files()
 
         if checkAgain == True:
             self.recursive_slice(iterations=iterations+1)
@@ -244,6 +261,7 @@ scraper.random_search = args.randomsearch
 scraper.recursion_params = {
     "maximum_length" : args.maxlen
 }
+scraper.minsize = args.minsize
 
 # This could be wrapped up in a process() function which knows which bits to do
 if verbose:
