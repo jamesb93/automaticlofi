@@ -52,14 +52,14 @@ class YoutubeQuery():
     YoutubeQuery is a container for all the functions and data required to request and download videos from youtube
     """
     def __init__(self):
-        self.numsamples:int
-        self.output:str
-        self.query:str
-        self.recognise_speech:bool
-        self.slice_recursively:bool
-        self.num_pages:int
-        self.recursion_params:dict
-        self.random_search:bool
+        self.numsamples = 0
+        self.output = ""
+        self.query = ""
+        self.recognise_speech = False
+        self.slice_recursively = True
+        self.num_page = 1
+        self.recursion_params = {}
+        self.random_search = True
 
     def bufspill(self, audio_file: str):
         try:
@@ -202,18 +202,22 @@ class YoutubeQuery():
     def rename_files(self):
         print('renaming files...')
         file_list = os.listdir(self.output)
-        for i in range(len(file_list)):
-            if os.path.splitext(file_list[i])[1] == '.wav':
-                print('Renaming file ' + str(i + 1) + '/' + str(len(file_list)))
-                name     = path + '/' + file_list[i]
-                fileLen  = str(len(AudioSegment.from_wav(name))).replace('.','_').replace(' ','_').replace(':','_')
-                dateTime = str(datetime.now()).replace('.','_').replace(' ','_').replace(':','_')
-                newName  = str(i) + '_' + fileLen + '_' + dateTime + '.wav'
-                newPath  = path + '/' + newName
-                print(newPath)
-                os.rename(name, newPath)
-                
-        print(str(len(file_list)) + ' files renamed!')
+        # for i in range(len(file_list)):
+        #     if os.path.splitext(file_list[i])[1] == '.wav':
+        #         print('Renaming file ' + str(i + 1) + '/' + str(len(file_list)))
+        #         name     = path + '/' + file_list[i]
+        #         fileLen  = str(len(AudioSegment.from_wav(name))).replace('.','_').replace(' ','_').replace(':','_')
+        #         dateTime = str(datetime.now()).replace('.','_').replace(' ','_').replace(':','_')
+        #         newName  = str(i) + '_' + fileLen + '_' + dateTime + '.wav'
+        #         newPath  = path + '/' + newName
+        #         print(newPath)
+        #         os.rename(name, newPath)
+        for path in file_list:
+            os.rename(
+                os.path.join(self.output, path),
+                '/Users/james/testfile.wav'
+            )
+        # print(str(len(file_list)) + ' files renamed!')
     
     def info_to_max(self):
         print('Some return information to max about where le files are')
@@ -234,13 +238,16 @@ scraper.recursion_params = {
 }
 
 # This could be wrapped up in a process() function which knows which bits to do
-scraper.audio_from_search(pages=3)
-scraper.slice_folder()
-
-if scraper.slice_recursively:
-    scraper.recursive_slice()
-if scraper.recognise_speech:
-    scraper.speech_folder() # <<-- Optional
+scraper.audio_from_search(pages=1)
+# scraper.slice_folder()
+# if scraper.slice_recursively:
+#     scraper.recursive_slice()
+# if scraper.recognise_speech:
+#     scraper.speech_folder() # <<-- Optional
 
 scraper.rename_files()
-scraper.info_to_max()
+# scraper.info_to_max()
+subprocess.call([
+    'open',
+    '/Users/james/foo.maxpat'
+])
