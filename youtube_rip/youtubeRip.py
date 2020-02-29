@@ -4,6 +4,10 @@
 # brew install ffmpeg
 # Also requires an internet connection for youtube download and speech recognition.
 
+verbose = True
+if verbose:
+    print('Starting youtube rip')
+
 import os
 import tempfile
 import numpy
@@ -39,6 +43,7 @@ parser.add_argument('-i', '--iterations', type=int, help='Number of iterations t
 parser.add_argument('-m', '--maxlen', type=int, help='Maximum length to recursively slice to.', default=20)
 parser.add_argument('-p', '--numpages', type=int, help='Number of youtube pages to scrape', default=1)
 parser.add_argument('-x', '--randomsearch', type=str2bool, help='Randomly scramble the search indices', default=True)
+parser.add_argument('-s', '--minsize', type=int, help='The minimum size of a returned file.', default=100)
 args = parser.parse_args()
 
 acceptedFiles       = ['.webm', '.wav', '.mp3', '.aiff', '.aif', '.wave', '.m4a']
@@ -52,14 +57,14 @@ class YoutubeQuery():
     YoutubeQuery is a container for all the functions and data required to request and download videos from youtube
     """
     def __init__(self):
-        self.numsamples:int
-        self.output:str
-        self.query:str
-        self.recognise_speech:bool
-        self.slice_recursively:bool
-        self.num_pages:int
-        self.recursion_params:dict
-        self.random_search:bool
+        self.numsamples = 0
+        self.output = ""
+        self.query = ""
+        self.recognise_speech = False
+        self.slice_recursively = True
+        self.num_page = 1
+        self.recursion_params = {}
+        self.random_search = True
 
     def bufspill(self, audio_file: str):
         try:
@@ -74,6 +79,9 @@ class YoutubeQuery():
     def audio_from_search(self, pages: int):
         audio_link = 'https://www.youtube.com/results?search_query='
 
+        if verbose:
+            print('Searching youtube for: ' + self.query)
+
         search_string_list = self.query.split()
         for i in range(len(search_string_list)):
             audio_link = audio_link + search_string_list[i] + "+"
@@ -82,6 +90,8 @@ class YoutubeQuery():
 
         if not os.path.exists(args.output):
             os.makedirs(args.output)
+            if verbose:
+                print('Creating output file here: ' + args.output)
         location = args.output + '/' + '%(title)s.%(ext)s'
 
         numsamples = self.numsamples
@@ -94,6 +104,7 @@ class YoutubeQuery():
             '--max-downloads', str(numsamples),
             '--no-part',
             '--playlist-random',
+            '--match-filter', '!is_live',
             audio_link
         ]
 
@@ -101,7 +112,10 @@ class YoutubeQuery():
         if not random_search:
             del subprocess_args[len(subprocess_args) - 2]
         
-        subprocess.call(subprocess_args)
+        print('TEST')
+        subprocess.call(subprocess_args, shell=False)
+        if verbose:
+                print('Youtube-dl subprocess completed.')
 
     def slice_audio(
         self, 
@@ -148,17 +162,29 @@ class YoutubeQuery():
         file_list = os.listdir(self.output)
         for i in range(len(file_list)):
             if os.path.splitext(file_list[i])[1] == '.wav':
-                name = os.path.join(path, file_list[i])
+                name = os.path.join(self.output, file_list[i])
                 self.slice_audio(file=name)
                 os.remove(name)
                 print('Sliced file ' + str(i + 1) + '/' + str(len(file_list)))
         print(str(len(file_list)) + ' files sliced!')
 
+        self.delete_small_files()
+
+    def delete_small_files(self):
+        print('Deleting files that are too small...')
+        file_list = os.listdir(self.output)
+        for i in range(len(file_list)):
+            if os.path.splitext(file_list[i])[1] == '.wav':
+                name = name = self.output + '/' + file_list[i]
+                if os.path.getsize(name) < self.minsize:
+                    os.remove(name)
+                    print('Deleted ' + name)
+                
     def recursive_slice(self, iterations=1):
         print('Recursive slicing...')
         checkAgain = False
         file_list = os.listdir(self.output)
-        mul = str((1 - (iteration * recursiveMultiplier)) * 0.5)
+        mul = str((1 - (iterations * recursiveMultiplier)) * 0.5)
         for i in range(len(file_list)):
             if os.path.splitext(file_list[i])[1] == '.wav':
                 name = self.output + '/' + file_list[i]
@@ -167,6 +193,8 @@ class YoutubeQuery():
                     self.slice_audio(name, threshold=mul)
                     os.remove(name)
                     checkAgain = True
+
+        self.delete_small_files()
 
         if checkAgain == True:
             self.recursive_slice(iterations=iterations+1)
@@ -202,18 +230,22 @@ class YoutubeQuery():
     def rename_files(self):
         print('renaming files...')
         file_list = os.listdir(self.output)
-        for i in range(len(file_list)):
-            if os.path.splitext(file_list[i])[1] == '.wav':
-                print('Renaming file ' + str(i + 1) + '/' + str(len(file_list)))
-                name     = path + '/' + file_list[i]
-                fileLen  = str(len(AudioSegment.from_wav(name))).replace('.','_').replace(' ','_').replace(':','_')
-                dateTime = str(datetime.now()).replace('.','_').replace(' ','_').replace(':','_')
-                newName  = str(i) + '_' + fileLen + '_' + dateTime + '.wav'
-                newPath  = path + '/' + newName
-                print(newPath)
-                os.rename(name, newPath)
-                
-        print(str(len(file_list)) + ' files renamed!')
+        # for i in range(len(file_list)):
+        #     if os.path.splitext(file_list[i])[1] == '.wav':
+        #         print('Renaming file ' + str(i + 1) + '/' + str(len(file_list)))
+        #         name     = path + '/' + file_list[i]
+        #         fileLen  = str(len(AudioSegment.from_wav(name))).replace('.','_').replace(' ','_').replace(':','_')
+        #         dateTime = str(datetime.now()).replace('.','_').replace(' ','_').replace(':','_')
+        #         newName  = str(i) + '_' + fileLen + '_' + dateTime + '.wav'
+        #         newPath  = path + '/' + newName
+        #         print(newPath)
+        #         os.rename(name, newPath)
+        for path in file_list:
+            os.rename(
+                os.path.join(self.output, path),
+                '/Users/james/testfile.wav'
+            )
+        # print(str(len(file_list)) + ' files renamed!')
     
     def info_to_max(self):
         print('Some return information to max about where le files are')
@@ -232,15 +264,21 @@ scraper.random_search = args.randomsearch
 scraper.recursion_params = {
     "maximum_length" : args.maxlen
 }
+scraper.minsize = args.minsize
 
 # This could be wrapped up in a process() function which knows which bits to do
-scraper.audio_from_search(pages=3)
-scraper.slice_folder()
+scraper.audio_from_search(pages=1)
+# scraper.slice_folder()
+# if scraper.slice_recursively:
+#     scraper.recursive_slice()
+# if scraper.recognise_speech:
+#     scraper.speech_folder() # <<-- Optional
 
-if scraper.slice_recursively:
-    scraper.recursive_slice()
-if scraper.recognise_speech:
-    scraper.speech_folder() # <<-- Optional
-
+if verbose:
+    print('Renaming files...')
 scraper.rename_files()
-scraper.info_to_max()
+# scraper.info_to_max()
+subprocess.call([
+    'open',
+    '/Users/james/foo.maxpat'
+])
